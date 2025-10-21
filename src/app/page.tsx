@@ -1,58 +1,50 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 function App() {
-  const [message, setMessage] = useState("加载中...");
-  const [echo, setEcho] = useState<string | null>(null);
+  const [contentString, setContentString] = useState("Loading...");
+  const [thinkingString, setThinkingString] = useState("");
 
-  useEffect(() => {
-    const load = async () => {
-      const response = await fetch("/api/hello");
-      if (!response.ok) {
-        setMessage("请求失败");
-        return;
-      }
-      const data: { message: string } = await response.json();
-      setMessage(data.message);
-    };
-
-    load().catch(() => setMessage("请求失败"));
-  }, []);
-
-  const sendEcho = async () => {
-    const response = await fetch("/api/hello", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ timestamp: new Date().toISOString() }),
-    });
-
-    if (!response.ok) {
-      setEcho("POST 请求失败");
-      return;
+  const fetchData = async (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter") return;
+    try {
+      const source = new EventSource("/api/deepseek");
+      source.onopen = () => {
+        setContentString("");
+        setThinkingString("");
+      };
+      source.onmessage = (event) => {
+        if (event.data === "[DONE]") {
+          source.close();
+          return;
+        }
+        console.log("Received event data:", JSON.parse(event.data).content);
+        const data = JSON.parse(event.data);
+        if (data.type === "reasoning") {
+          setThinkingString((p) => p + data.content);
+        } else if (data.type === "content") {
+          setContentString((p) => p + data.content);
+        }
+      };
+    } catch (err) {
+      console.error("Error fetching data", err);
+      setContentString("Error fetching data");
     }
-
-    const data: { received: unknown } = await response.json();
-    setEcho(JSON.stringify(data.received));
   };
 
   return (
-    <main
-      style={{
-        display: "grid",
-        gap: "1rem",
-        padding: "2rem",
-        fontSize: "1.1rem",
-      }}
-    >
-      <div>GET: {message}</div>
-      <button type="button" onClick={sendEcho}>
-        发送 POST 请求
-      </button>
-      {echo && <div>POST: {echo}</div>}
-    </main>
+    <>
+      <div>
+        <input
+          type="text"
+          onKeyDown={fetchData}
+          className="border-2 border-gray-300 p-2 rounded"
+        />
+      </div>
+      <div>{thinkingString}</div>
+      <div>{contentString}</div>
+    </>
   );
 }
 

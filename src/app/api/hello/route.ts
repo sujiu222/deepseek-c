@@ -1,10 +1,22 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  return NextResponse.json({ message: "Hello from the Next.js API route!" });
-}
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
 
-export async function POST(request: Request) {
-  const payload = await request.json();
-  return NextResponse.json({ received: payload });
+  let counter = 0;
+  const timer = setInterval(() => {
+    if (counter++ == 3) {
+      writer.write(encoder.encode("data: [DONE]\n\n"));
+      writer.close();
+      clearInterval(timer);
+      return;
+    }
+    writer.write(encoder.encode(`data: Message part ${counter}\n\n`));
+  }, 1000);
+
+  return new NextResponse(readable, {
+    headers: { "Content-Type": "text/event-stream" },
+  });
 }
