@@ -22,10 +22,10 @@ const openai = new OpenAI({
   apiKey,
 });
 
-async function main() {
+async function main(input: string) {
   const completion = await openai.chat.completions.create({
     model: "deepseek-reasoner",
-    messages: [{ role: "user", content: "9.11 and 9.8, which is greater?" }],
+    messages: [{ role: "user", content: input }],
     stream: true,
   });
   //   console.log("DeepSeek response:", completion);
@@ -59,9 +59,10 @@ async function main() {
   return readable;
 }
 
-export async function GET() {
+export async function POST(req: Request) {
   try {
-    const readable = await main();
+    const { input } = await req.json();
+    const readable = await main(input);
     return new NextResponse(readable, {
       headers: {
         "Content-Type": "text/event-stream",
