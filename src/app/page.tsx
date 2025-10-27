@@ -4,6 +4,7 @@ import { useState } from "react";
 import { fetchData } from "@/lib/deepseek";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MarkdownMessage } from "@/components/MarkdownMessage";
 
 function App() {
   const [contentString, setContentString] = useState("");
@@ -21,25 +22,23 @@ function App() {
   const sendMessage = async () => {
     const message = inputString;
     if (!message.trim()) return; // 空消息不发送
+    const fullContent = contentString;
+    if (fullContent) {
+      setTextList((prev) => [...prev, { type: "ai", content: fullContent }]); // 使用函数式更新和完整内容
+    }
     setInputString("");
     setContentString("");
     setThinkingString("");
     setTextList((prev) => [...prev, { type: "user", content: message }]);
-
-    let fullContent = ""; // 使用临时变量存储完整内容
 
     for await (const chunk of fetchData(message)) {
       if (chunk.type === "reasoning") {
         setThinkingString((prev) => prev + chunk.content);
       } else if (chunk.type === "content") {
         // setPending(false); // 一旦收到内容就关闭加载状态
-        fullContent += chunk.content;
-        setContentString(fullContent);
+        setContentString((prev) => prev + chunk.content);
       }
     }
-
-    setTextList((prev) => [...prev, { type: "ai", content: fullContent }]); // 使用函数式更新和完整内容
-    setContentString("");
   };
 
   // Textarea 键盘行为：Enter 发送；Shift+Enter 换行
@@ -69,8 +68,8 @@ function App() {
           } else if (textObj.type === "ai") {
             return (
               <div key={idx} className="w-2/3 ">
-                <div className="w-fit bg-gray-50 p-3 rounded-lg">
-                  {textObj.content}
+                <div className="w-full  p-4 rounded-lg">
+                  <MarkdownMessage content={textObj.content} />
                 </div>
               </div>
             );
@@ -96,9 +95,11 @@ function App() {
             )}
           </div>
         )}
-        <div className="w-2/3 whitespace-pre-wrap break-words">
-          {contentString}
-        </div>
+        {contentString && (
+          <div className="w-2/3  p-4 rounded-lg">
+            <MarkdownMessage content={contentString} />
+          </div>
+        )}
       </div>
       <div
         className={
