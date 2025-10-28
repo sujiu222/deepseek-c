@@ -1,0 +1,7 @@
+{
+  "scopes": [],
+  "allowCustomScopes": false,
+  "allowBreakingChanges": false,
+  "skipQuestions": ["scope", "body", "breaking", "footer"],
+  "subjectLimit": 72
+}

@@ -1,4 +1,6 @@
-import { ChevronUp, Home, MessageCirclePlus } from "lucide-react";
+"use client";
+import { ChevronUp, MessageCirclePlus } from "lucide-react";
+import Login from "@/components/Login";
 
 import {
   Sidebar,
@@ -17,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import { useState } from "react";
 
 // Menu items.
 const items = [
@@ -28,8 +31,10 @@ const items = [
 ];
 
 export function AppSidebar() {
+  const [openLogin, setOpenLogin] = useState(true);
   return (
     <Sidebar>
+      <Login open={openLogin} />
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Application</SidebarGroupLabel>
