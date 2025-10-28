@@ -14,6 +14,7 @@ model User {
   createdAt DateTime @default(now())
   orders    Order[]
   usages    Usage[]
+  conversations Conversation[]
 }
 
 model Order {
@@ -39,4 +40,45 @@ model Usage {
   user      User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
+}
+
+/// 会话：归属于登录用户或匿名 sessionId（其一至少存在）
+model Conversation {
+  id              String    @id @default(cuid())
+  userId          String?
+  sessionId       String?
+  title           String?
+  status          String    @default("ACTIVE") // ACTIVE | ARCHIVED | DELETED
+  summary         String?   @db.Text
+  messageCount    Int       @default(0)
+  firstMessageAt  DateTime?
+  lastMessageAt   DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User?     @relation(fields: [userId], references: [id])
+  messages        Message[]
+
+  @@index([userId, updatedAt])
+  @@index([sessionId, updatedAt])
+  @@index([status])
+}
+
+/// 消息：属于某个会话
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String   // 'user' | 'assistant' | 'system' | 'tool'
+  content        String   @db.Text
+  reasoning      String?  @db.Text
+  seq            Int
+  tokensInput    Int?
+  tokensOutput   Int?
+  error          Boolean? @default(false)
+  createdAt      DateTime @default(now())
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+
+  @@index([conversationId, seq])
+  @@index([conversationId, createdAt])
 }
