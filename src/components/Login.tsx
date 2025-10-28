@@ -1,21 +1,31 @@
 "use client";
 
 import { loginOrSignUp } from "@/lib/auth";
+import useStore from "@/store/store";
 import { useState } from "react";
 
 type Props = {
-  onSuccess?: (user: { id: string; username: string }) => void;
+  onSuccess?: () => void;
+  onCancel?: () => void;
   open: boolean;
 };
-function Login({ onSuccess, open }: Props) {
+function Login({ onSuccess, onCancel, open }: Props) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLogin, setIsLogin] = useState(true);
+  const setUser = useStore((state) => state.setUser);
+
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    // 第三个参数：是否注册（isSignup）——登录时为 false，注册时为 true
-    await loginOrSignUp(username, password, !isLogin);
-    onSuccess?.({ id: "", username });
+    const user = await loginOrSignUp(username, password, !isLogin);
+    if (user && "error" in user) {
+      alert(user.error);
+      onCancel?.();
+      return;
+    }
+
+    setUser(user);
+    onSuccess?.();
   };
 
   return (

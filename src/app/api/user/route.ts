@@ -5,6 +5,8 @@ const prisma = new PrismaClient({
   log: ["query", "info", "warn", "error"], // 开发阶段可看 SQL
 });
 
+export const USER_COOKIE = "deepseek_user";
+
 export async function POST(request: NextRequest) {
   const { username, password, isSignup } = await request.json();
   let user = null;
@@ -19,11 +21,23 @@ export async function POST(request: NextRequest) {
       headers: { "content-type": "application/json" },
     });
   }
-  console.log(user);
-  return new NextResponse(JSON.stringify(user), {
+  const res = new NextResponse(JSON.stringify(user), {
     status: 200,
     headers: { "content-type": "application/json" },
   });
+
+  const id = user?.id;
+
+  res.cookies.set({
+    name: USER_COOKIE,
+    value: JSON.stringify(id),
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+
+  return res;
 }
 
 async function signUp(username: string, password: string) {

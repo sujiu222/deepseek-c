@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { useState } from "react";
+import useStore, { StoreState } from "@/store/store";
 
 // Menu items.
 const items = [
@@ -31,10 +32,29 @@ const items = [
 ];
 
 export function AppSidebar() {
-  const [openLogin, setOpenLogin] = useState(true);
+  const [openLogin, setOpenLogin] = useState(false);
+  const user = useStore((state) => state.user);
+  const setUser = useStore((state) => state.setUser);
+
+  fetch("/api/user/conversation", {
+    method: "POST",
+  });
+
+  const handleSignup = () => {
+    if (user) {
+      setUser(null);
+      return;
+    }
+    setOpenLogin(true);
+  };
+
   return (
     <Sidebar>
-      <Login open={openLogin} />
+      <Login
+        open={openLogin}
+        onSuccess={() => setOpenLogin(false)}
+        onCancel={() => setOpenLogin(false)}
+      />
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Application</SidebarGroupLabel>
@@ -72,7 +92,7 @@ export function AppSidebar() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton>
-              Username
+              {user ? `用户 : ${user.username}` : "未登录"}
               <ChevronUp className="ml-auto" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
@@ -80,7 +100,9 @@ export function AppSidebar() {
             side="top"
             className="w-[var(--radix-dropdown-menu-trigger-width)]"
           >
-            <DropdownMenuItem>登陆/登出</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleSignup}>
+              登陆/登出
+            </DropdownMenuItem>
             <DropdownMenuItem>账单</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
