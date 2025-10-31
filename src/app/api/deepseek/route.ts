@@ -10,6 +10,7 @@
  * 说明：
  * - 记忆默认仅存储于当前 Node 进程内（内存级），重启/多实例不会共享。若需要持久化/横向扩展，请改为数据库或 KV 存储。
  */
+import { PrismaClient } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import type {
@@ -78,6 +79,8 @@ const openai = new OpenAI({
   baseURL,
   apiKey,
 });
+
+const prisma = new PrismaClient();
 
 // 获取或创建一个会话内存容器
 function getOrCreateSession(sessionId: string) {
@@ -240,6 +243,13 @@ async function main(messages: ChatCompletionMessageParam[]) {
 
   return { readable, finalContent };
 }
+
+type deepseekRequestBody = {
+  input: string;
+  reset?: boolean;
+  conversationId?: string;
+};
+
 /**
  *
  * @param req:{body:{input:string,reset?:boolean}}
@@ -248,10 +258,14 @@ async function main(messages: ChatCompletionMessageParam[]) {
 export async function POST(req: NextRequest) {
   // 入口：接收用户输入，基于历史记忆构建 Prompt，流式返回，同时更新会话记忆
   try {
-    const body = await req.json();
+    const body: deepseekRequestBody = await req.json();
     const input =
       typeof body?.input === "string" ? body.input.trim() : undefined;
 
+    const userId = (() => {
+      const userId = req.cookies.get("user-id")?.value;
+      return JSON.parse(userId ?? "null") as string | null;
+    })();
     if (!input) {
       // 参数校验：必须提供 input
       return NextResponse.json(
@@ -262,14 +276,33 @@ export async function POST(req: NextRequest) {
         }
       );
     }
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
 
-    // 1) 解析/生成 sessionId，并获取会话容器
-    const incomingSessionId = req.cookies.get(SESSION_COOKIE)?.value;
-    const sessionId = incomingSessionId ?? crypto.randomUUID();
-    const session = getOrCreateSession(sessionId);
+    let conversationId = body.conversationId;
+    let isNewConversation = false;
 
-    // 2) 支持外部请求重置记忆（例如 body.reset = true）
-    if (body?.reset === true) {
+    if (!conversationId) {
+      ({ id: conversationId } = await prisma.conversation.create({
+        data: {
+          userId,
+        },
+      }));
+      isNewConversation = true;
+    }
+
+    // 1) 使用 conversationId 作为 sessionId，确保每个对话有独立的记忆
+    const session = getOrCreateSession(conversationId);
+
+    // 2) 新对话或外部请求重置时，清空记忆
+    if (isNewConversation || body?.reset === true) {
       session.messages = [];
       session.summary = undefined;
     }
@@ -287,18 +320,9 @@ export async function POST(req: NextRequest) {
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
         "X-Accel-Buffering": "no",
+        "X-Conversation-Id": conversationId,
       },
     });
-
-    // 如为新会话，将 sessionId 写回 Cookie
-    if (!incomingSessionId) {
-      response.cookies.set(SESSION_COOKIE, sessionId, {
-        httpOnly: true,
-        sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 7,
-        path: "/",
-      });
-    }
 
     // 6) 流结束后异步写入会话记忆，并按需总结、裁剪
     finalContent
@@ -315,6 +339,42 @@ export async function POST(req: NextRequest) {
 
         await maybeSummarizeSession(session);
         trimSession(session);
+
+        // 同步更新数据库中的会话记录,添加user和assistant两条消息
+
+        await prisma.$transaction(async (tx) => {
+          const updated = await tx.conversation.update({
+            where: { id: conversationId },
+            data: {
+              updatedAt: new Date(),
+              messageCount: { increment: 2 },
+            },
+          });
+
+          // seq 从 0 开始计数，messageCount 是消息总数
+          // 更新后 messageCount = 2，则 userSeq = 0, assistantSeq = 1
+          const userSeq = updated.messageCount - 2;
+          const assistantSeq = updated.messageCount - 1;
+
+          await tx.message.create({
+            data: {
+              conversationId,
+              role: "user",
+              content: input,
+              seq: userSeq,
+            },
+          });
+
+          await tx.message.create({
+            data: {
+              conversationId,
+              role: "assistant",
+              content,
+              reasoning: reasoning.trim() ? reasoning : undefined,
+              seq: assistantSeq,
+            },
+          });
+        });
       })
       .catch((error) => {
         console.error("Failed to finalize DeepSeek response", error);

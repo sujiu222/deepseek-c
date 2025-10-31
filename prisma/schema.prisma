@@ -47,13 +47,13 @@ model Usage {
 model Conversation {
   id              String    @id @default(cuid())
   userId          String?
-  sessionId       String?
-  title           String?
-  status          String    @default("ACTIVE") // ACTIVE | ARCHIVED | DELETED
-  summary         String?   @db.Text
+  // sessionId 暂不考虑游客模式       String?
+  // title           String?
+  // status          String    @default("ACTIVE") // ACTIVE | ARCHIVED | DELETED
+  // summary         String?   @db.Text
   messageCount    Int       @default(0)
-  firstMessageAt  DateTime?
-  lastMessageAt   DateTime?
+  // firstMessageAt  DateTime?
+  // lastMessageAt   DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -61,8 +61,8 @@ model Conversation {
   messages        Message[]
 
   @@index([userId, updatedAt])
-  @@index([sessionId, updatedAt])
-  @@index([status])
+  // @@index([sessionId, updatedAt])
+  // @@index([status])
 }
 
 /// 消息：属于某个会话
@@ -80,6 +80,7 @@ model Message {
 
   conversation   Conversation @relation(fields: [conversationId], references: [id])
 
+  @@unique([conversationId,seq])
   @@index([conversationId, seq])
   @@index([conversationId, createdAt])
 }

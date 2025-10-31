@@ -19,26 +19,28 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { useState } from "react";
-import useStore, { StoreState } from "@/store/store";
+import { useEffect, useState } from "react";
+import useStore from "@/store/store";
+import { Prisma } from "@prisma/client";
 
 // Menu items.
 const items = [
   {
     title: "新对话",
-    url: "#",
+    url: "/",
     icon: MessageCirclePlus,
   },
 ];
 
+type messageHistory = Prisma.ConversationGetPayload<{
+  include: { messages: { take: 1 } };
+}>;
+
 export function AppSidebar() {
   const [openLogin, setOpenLogin] = useState(false);
+  const [messageHistory, setMessageHistory] = useState<messageHistory[]>([]);
   const user = useStore((state) => state.user);
   const setUser = useStore((state) => state.setUser);
-
-  fetch("/api/user/conversation", {
-    method: "POST",
-  });
 
   const handleSignup = () => {
     if (user) {
@@ -47,6 +49,43 @@ export function AppSidebar() {
     }
     setOpenLogin(true);
   };
+
+  const getUserMessageHistory = async () => {
+    const res = await fetch("/api/user/conversation-history", {
+      method: "GET",
+    });
+    const data = await res.json();
+    return data;
+  };
+
+  useEffect(() => {
+    const initUser = async () => {
+      try {
+        const res = await fetch("/api/user", {
+          method: "GET",
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user) {
+            setUser(data.user);
+          }
+          console.log(data);
+        }
+      } catch (error) {
+        console.error("Error fetching user:", error);
+      }
+    };
+    initUser();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const messageArr = await getUserMessageHistory();
+      setMessageHistory(messageArr.conversation);
+      console.log(messageHistory);
+    })();
+  }, [user]);
 
   return (
     <Sidebar>
@@ -77,13 +116,15 @@ export function AppSidebar() {
           <SidebarGroupLabel>历史记录</SidebarGroupLabel>
           <SidebarContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <a href="/history/123">
-                    <span>会话 123</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              {messageHistory.map((msgRaw) => (
+                <SidebarMenuItem key={msgRaw.id}>
+                  <SidebarMenuButton asChild>
+                    <a href="#">
+                      <span>{msgRaw.messages[0].content}</span>
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarContent>
         </SidebarGroup>

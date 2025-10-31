@@ -1,13 +1,14 @@
 // 封装token / 推理
 
-export async function* fetchData(input: string) {
+export async function* fetchData(input: string, conversationId: string | null) {
   try {
     const response = await fetch("/api/deepseek", {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ input }),
+      body: JSON.stringify({ input, conversationId }),
     });
 
     if (!response.body) {
@@ -17,6 +18,9 @@ export async function* fetchData(input: string) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
+    const headers = response.headers;
+    const returnedConversationId = headers.get("X-Conversation-Id");
+    yield { type: "conversationId", conversationId: returnedConversationId };
     // NOTE 每次通过await将管理权还给浏览器
     while (true) {
       const { done, value } = await reader.read();

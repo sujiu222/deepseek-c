@@ -5,7 +5,30 @@ const prisma = new PrismaClient({
   log: ["query", "info", "warn", "error"], // 开发阶段可看 SQL
 });
 
-export const USER_COOKIE = "deepseek_user";
+export const USER_COOKIE = "user-id";
+
+async function signUp(username: string, password: string) {
+  try {
+    return await prisma.user.create({
+      data: { username, password },
+    });
+  } catch (e: any) {
+    if (e?.code === "P2002") {
+      return { error: "User already exists" };
+    }
+  }
+}
+
+async function login(username: string, password: string) {
+  const user = await prisma.user.findUnique({ where: { username } });
+  if (!user) {
+    return { error: "Invalid username!" };
+  }
+  if (user.password !== password) {
+    return { error: "Invalid password!" };
+  }
+  return user;
+}
 
 export async function POST(request: NextRequest) {
   const { username, password, isSignup } = await request.json();
@@ -40,25 +63,23 @@ export async function POST(request: NextRequest) {
   return res;
 }
 
-async function signUp(username: string, password: string) {
-  try {
-    return await prisma.user.create({
-      data: { username, password },
-    });
-  } catch (e: any) {
-    if (e?.code === "P2002") {
-      return { error: "User already exists" };
-    }
+export async function GET(request: NextRequest) {
+  const cookies = request.cookies;
+  if (!cookies.has(USER_COOKIE)) {
+    return NextResponse.json({ user: null });
   }
-}
 
-async function login(username: string, password: string) {
-  const user = await prisma.user.findUnique({ where: { username } });
-  if (!user) {
-    return { error: "Invalid username!" };
+  const userIdRaw = cookies.get(USER_COOKIE)?.value as string;
+  const userId = JSON.parse(userIdRaw);
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true },
+    });
+
+    return NextResponse.json({ user });
+  } catch (error) {
+    return NextResponse.json({ user: null });
   }
-  if (user.password !== password) {
-    return { error: "Invalid password!" };
-  }
-  return user;
 }
