@@ -86,6 +86,9 @@ function ChatInterface({ conversationId }: Props) {
         }
       }
     }
+
+    // 发送完成后通知侧边栏刷新历史记录
+    window.dispatchEvent(new Event("conversationUpdated"));
   };
 
   // Textarea 键盘行为：Enter 发送；Shift+Enter 换行

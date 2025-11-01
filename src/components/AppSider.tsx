@@ -1,6 +1,8 @@
 "use client";
 import { ChevronUp, MessageCirclePlus } from "lucide-react";
 import Login from "@/components/Login";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import {
   Sidebar,
@@ -51,11 +53,23 @@ export function AppSidebar() {
   };
 
   const getUserMessageHistory = async () => {
-    const res = await fetch("/api/user/conversation-history", {
-      method: "GET",
-    });
-    const data = await res.json();
-    return data;
+    if (!user) return { conversation: [] };
+    try {
+      const res = await fetch("/api/user/conversation-history", {
+        method: "GET",
+        credentials: "include",
+      });
+      const data = await res.json();
+      return data;
+    } catch (error) {
+      console.error("获取历史记录失败:", error);
+      return { conversation: [] };
+    }
+  };
+
+  const refreshHistory = async () => {
+    const messageArr = await getUserMessageHistory();
+    setMessageHistory(messageArr.conversation || []);
   };
 
   useEffect(() => {
@@ -70,21 +84,43 @@ export function AppSidebar() {
           if (data.user) {
             setUser(data.user);
           }
-          console.log(data);
         }
       } catch (error) {
         console.error("Error fetching user:", error);
       }
     };
     initUser();
-  }, []);
+  }, [setUser]);
 
+  // 用户登录后立即刷新历史
   useEffect(() => {
-    (async () => {
-      const messageArr = await getUserMessageHistory();
-      setMessageHistory(messageArr.conversation);
-      console.log(messageHistory);
-    })();
+    if (user) {
+      refreshHistory();
+    } else {
+      setMessageHistory([]);
+    }
+  }, [user]);
+
+  // 定期刷新历史记录（每 10 秒）
+  useEffect(() => {
+    if (!user) return;
+
+    const interval = setInterval(() => {
+      refreshHistory();
+    }, 10000); // 10 秒刷新一次
+
+    return () => clearInterval(interval);
+  }, [user]);
+
+  // 监听自定义事件，发送消息后主动刷新
+  useEffect(() => {
+    const handleRefresh = () => {
+      refreshHistory();
+    };
+
+    window.addEventListener("conversationUpdated", handleRefresh);
+    return () =>
+      window.removeEventListener("conversationUpdated", handleRefresh);
   }, [user]);
 
   return (
@@ -102,10 +138,10 @@ export function AppSidebar() {
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton variant="ring-2" asChild>
-                    <a href={item.url}>
+                    <Link href="/chat/new">
                       <item.icon />
                       <span>{item.title}</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -114,19 +150,19 @@ export function AppSidebar() {
         </SidebarGroup>
         <SidebarGroup>
           <SidebarGroupLabel>历史记录</SidebarGroupLabel>
-          <SidebarContent>
+          <SidebarGroupContent>
             <SidebarMenu>
               {messageHistory.map((msgRaw) => (
                 <SidebarMenuItem key={msgRaw.id}>
                   <SidebarMenuButton asChild>
-                    <a href="#">
-                      <span>{msgRaw.messages[0].content}</span>
-                    </a>
+                    <Link href={`/chat/${msgRaw.id}`}>
+                      <span>{msgRaw.messages?.[0]?.content || "新会话"}</span>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
-          </SidebarContent>
+          </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
