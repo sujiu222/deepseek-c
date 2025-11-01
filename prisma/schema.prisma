@@ -12,6 +12,7 @@ model User {
   wallet    String?  @unique
   username  String   @unique
   password  String
+  apiKey    String?  // 用户的 API Key (加密存储)
   createdAt DateTime @default(now())
   orders    Order[]
   usages    Usage[]

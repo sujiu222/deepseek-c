@@ -1,6 +1,7 @@
 "use client";
 import { ChevronUp, MessageCirclePlus } from "lucide-react";
 import Login from "@/components/Login";
+import { ApiKeyDialog } from "@/components/ApiKeyDialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -40,6 +41,7 @@ type messageHistory = Prisma.ConversationGetPayload<{
 
 export function AppSidebar() {
   const [openLogin, setOpenLogin] = useState(false);
+  const [openApiKey, setOpenApiKey] = useState(false);
   const [messageHistory, setMessageHistory] = useState<messageHistory[]>([]);
   const user = useStore((state) => state.user);
   const setUser = useStore((state) => state.setUser);
@@ -130,6 +132,7 @@ export function AppSidebar() {
         onSuccess={() => setOpenLogin(false)}
         onCancel={() => setOpenLogin(false)}
       />
+      <ApiKeyDialog open={openApiKey} onOpenChange={setOpenApiKey} />
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Application</SidebarGroupLabel>
@@ -180,7 +183,9 @@ export function AppSidebar() {
             <DropdownMenuItem onClick={handleSignup}>
               登陆/登出
             </DropdownMenuItem>
-            <DropdownMenuItem>账单</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setOpenApiKey(true)}>
+              API Key
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarFooter>

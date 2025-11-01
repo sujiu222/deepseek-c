@@ -6,7 +6,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { Button } from "@/components/ui/button";
-import { Send, Brain } from "lucide-react";
+import { Send } from "lucide-react";
+import { ModelSelector } from "@/components/ModelSelector";
+import { getDefaultModel, getModelById, type ModelConfig } from "@/lib/models";
 
 type Props = { conversationId: string };
 
@@ -19,10 +21,33 @@ function ChatInterface({ conversationId }: Props) {
   >([]);
   const [pending, setPending] = useState(false);
   const [showThinking, setShowThinking] = useState(true);
-  const [enableDeepThinking, setEnableDeepThinking] = useState(true);
+  const [selectedModel, setSelectedModel] = useState<ModelConfig>(
+    getDefaultModel()
+  );
   const actualConversationIdRef = useRef<string | null>(null);
   const textareaIsInBottom =
     thinkingString || contentString || textList.length !== 0 ? true : false;
+
+  // 从 sessionStorage 加载保存的模型选择
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedModelId = sessionStorage.getItem("selectedModelId");
+      if (savedModelId) {
+        const model = getModelById(savedModelId);
+        if (model) {
+          setSelectedModel(model);
+        }
+      }
+    }
+  }, []);
+
+  // 保存模型选择到 sessionStorage
+  const handleModelChange = (model: ModelConfig) => {
+    setSelectedModel(model);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("selectedModelId", model.id);
+    }
+  };
 
   useEffect(() => {
     const loadHistory = async () => {
@@ -70,20 +95,9 @@ function ChatInterface({ conversationId }: Props) {
       actualConversationIdRef.current ||
       (conversationId === "new" ? null : conversationId);
 
-    // 如果关闭深度思考，自动隐藏思考过程
-    if (!enableDeepThinking) {
-      setShowThinking(false);
-    }
-
-    for await (const chunk of fetchData(
-      message,
-      currentId,
-      enableDeepThinking
-    )) {
+    for await (const chunk of fetchData(message, currentId, selectedModel.id)) {
       if (chunk.type === "reasoning") {
-        if (enableDeepThinking) {
-          setThinkingString((prev) => prev + chunk.content);
-        }
+        setThinkingString((prev) => prev + chunk.content);
       } else if (chunk.type === "content") {
         setContentString((prev) => prev + chunk.content);
       } else if (chunk.type === "conversationId" && chunk.conversationId) {
@@ -189,23 +203,12 @@ function ChatInterface({ conversationId }: Props) {
             placeholder="输入你的问题……"
             disabled={pending}
           />
-          <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
-            <button
-              onClick={() => setEnableDeepThinking(!enableDeepThinking)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors ${
-                enableDeepThinking
-                  ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-            >
-              <Brain className="w-4 h-4" />
-              <span>深度思考</span>
-              {enableDeepThinking && (
-                <span className="text-xs bg-blue-200 px-1.5 py-0.5 rounded">
-                  开启
-                </span>
-              )}
-            </button>
+          <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2">
+            <ModelSelector
+              selectedModel={selectedModel}
+              onModelChange={handleModelChange}
+              disabled={pending}
+            />
             <Button
               onClick={handleSendClick}
               disabled={!inputString.trim() || pending}

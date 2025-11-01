@@ -56,31 +56,32 @@ if (!globalForMemory.deepseekMemoryStore) {
 }
 
 // 记忆相关配置：基于 Cookie 暂存对话上下文并定期总结
-// - SESSION_COOKIE：标识会话的 Cookie 名称
 // - MAX_HISTORY_MESSAGES：参与构建 Prompt 的最近消息条数（过多会影响开销）
 // - SUMMARY_TRIGGER_MESSAGE_COUNT：达到此消息条数后尝试运行一次摘要
 // - RECENT_MESSAGES_AFTER_SUMMARY：生成摘要后仅保留最近 N 条“原始消息”，其余靠 summary 复现上下文
-const SESSION_COOKIE = "deepseek-session";
 const MAX_HISTORY_MESSAGES = 20;
 const SUMMARY_TRIGGER_MESSAGE_COUNT = 24;
 const RECENT_MESSAGES_AFTER_SUMMARY = 10;
 
 const baseURL = process.env.DEEPSEEK_RPC_URL ?? "https://api.deepseek.com";
-const apiKey = process.env.DEEPSEEK_API_KEY;
+// const defaultApiKey = process.env.DEEPSEEK_API_KEY;
 
-// 未配置密钥时给出提示（请求将失败）
-if (!apiKey) {
-  console.warn(
-    "Missing DEEPSEEK_API_KEY env var; DeepSeek requests will fail."
-  );
-}
-
-const openai = new OpenAI({
-  baseURL,
-  apiKey,
-});
+// // 未配置密钥时给出提示（请求将失败）
+// if (!defaultApiKey) {
+//   console.warn(
+//     "Missing DEEPSEEK_API_KEY env var; Users must provide their own API keys."
+//   );
+// }
 
 const prisma = new PrismaClient();
+
+// 创建 OpenAI 客户端实例（支持自定义 API Key）
+function createOpenAIClient(apiKey: string) {
+  return new OpenAI({
+    baseURL,
+    apiKey: apiKey,
+  });
+}
 
 // 获取或创建一个会话内存容器
 function getOrCreateSession(sessionId: string) {
@@ -130,8 +131,11 @@ function trimSession(session: MemorySession) {
 
 // 达到阈值后触发一次会话总结：
 // - 用总结替代更远的原始消息，减少后续 prompt 体积
-// - 保留最近若干条原始消息，让模型能“贴地”对话
-async function maybeSummarizeSession(session: MemorySession) {
+// - 保留最近若干条原始消息，让模型能"贴地"对话
+async function maybeSummarizeSession(
+  session: MemorySession,
+  userApiKey: string
+) {
   if (session.messages.length <= SUMMARY_TRIGGER_MESSAGE_COUNT) {
     return;
   }
@@ -141,6 +145,7 @@ async function maybeSummarizeSession(session: MemorySession) {
     .join("\n");
 
   try {
+    const openai = createOpenAIClient(userApiKey);
     const summaryCompletion = await openai.chat.completions.create({
       model: "deepseek-reasoner",
       stream: false,
@@ -174,11 +179,12 @@ async function maybeSummarizeSession(session: MemorySession) {
 // - 同时返回 finalContent Promise，供流结束后写入记忆
 async function main(
   messages: ChatCompletionMessageParam[],
-  enableDeepThinking: boolean
+  modelId: string,
+  userApiKey: string
 ) {
-  const model = enableDeepThinking ? "deepseek-reasoner" : "deepseek-chat";
+  const openai = createOpenAIClient(userApiKey);
   const completion = await openai.chat.completions.create({
-    model,
+    model: modelId,
     messages,
     stream: true,
   });
@@ -252,12 +258,12 @@ type deepseekRequestBody = {
   input: string;
   reset?: boolean;
   conversationId?: string;
-  enableDeepThinking?: boolean;
+  modelId?: string;
 };
 
 /**
  *
- * @param req:{body:{input:string,reset?:boolean}}
+ * @param req:{body:{input:string,reset?:boolean,modelId?:string}}
  * @returns
  */
 export async function POST(req: NextRequest) {
@@ -271,7 +277,8 @@ export async function POST(req: NextRequest) {
       const userId = req.cookies.get("user-id")?.value;
       return JSON.parse(userId ?? "null") as string | null;
     })();
-    const enableDeepThinking = body.enableDeepThinking ?? false;
+    const modelId = body.modelId ?? "deepseek-r1"; // 默认使用 deepseek-r1
+
     if (!input) {
       // 参数校验：必须提供 input
       return NextResponse.json(
@@ -291,6 +298,30 @@ export async function POST(req: NextRequest) {
         }
       );
     }
+
+    // 获取用户的 API Key（如果已设置）
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { apiKey: true },
+    });
+    const userApiKey = user?.apiKey;
+
+    if (!userApiKey) {
+      return NextResponse.json(
+        { error: "User API Key not set" },
+        {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // 记录用户选择的模型（仅用于日志）
+    console.log(
+      `User ${userId} selected model: ${modelId}, using ${
+        userApiKey ? "user" : "default"
+      } API key`
+    );
 
     let conversationId = body.conversationId;
     let isNewConversation = false;
@@ -316,8 +347,12 @@ export async function POST(req: NextRequest) {
     // 3) 构建本轮 Prompt 消息
     const messages = buildPromptMessages(session, input);
 
-    // 4) 与 DeepSeek 进行流式对话
-    const { readable, finalContent } = await main(messages, enableDeepThinking);
+    // 4) 与 AI 模型进行流式对话（使用用户选择的模型和API Key）
+    const { readable, finalContent } = await main(
+      messages,
+      modelId,
+      userApiKey
+    );
 
     // 5) 返回 SSE 响应给客户端
     const response = new NextResponse(readable, {
@@ -343,7 +378,7 @@ export async function POST(req: NextRequest) {
         }
         session.messages.push(assistantMessage);
 
-        await maybeSummarizeSession(session);
+        await maybeSummarizeSession(session, userApiKey);
         trimSession(session);
 
         // 同步更新数据库中的会话记录,添加user和assistant两条消息
@@ -390,7 +425,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("DeepSeek request failed", error);
     return NextResponse.json(
-      { error: "Failed to contact DeepSeek" },
+      { message: "Failed to contact DeepSeek", error },
       {
         status: 502,
         headers: { "Content-Type": "application/json" },

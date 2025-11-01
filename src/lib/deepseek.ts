@@ -3,7 +3,7 @@
 export async function* fetchData(
   input: string,
   conversationId: string | null,
-  enableDeepThinking: boolean
+  modelId?: string
 ) {
   try {
     const response = await fetch("/api/deepseek", {
@@ -12,7 +12,7 @@ export async function* fetchData(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ input, conversationId, enableDeepThinking }),
+      body: JSON.stringify({ input, conversationId, modelId }),
     });
 
     if (!response.body) {
