@@ -1,6 +1,10 @@
 // 封装token / 推理
 
-export async function* fetchData(input: string, conversationId: string | null) {
+export async function* fetchData(
+  input: string,
+  conversationId: string | null,
+  enableDeepThinking: boolean
+) {
   try {
     const response = await fetch("/api/deepseek", {
       method: "POST",
@@ -8,7 +12,7 @@ export async function* fetchData(input: string, conversationId: string | null) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ input, conversationId }),
+      body: JSON.stringify({ input, conversationId, enableDeepThinking }),
     });
 
     if (!response.body) {

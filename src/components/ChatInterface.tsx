@@ -5,6 +5,8 @@ import { fetchData } from "@/lib/deepseek";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
+import { Button } from "@/components/ui/button";
+import { Send, Brain } from "lucide-react";
 
 type Props = { conversationId: string };
 
@@ -17,6 +19,7 @@ function ChatInterface({ conversationId }: Props) {
   >([]);
   const [pending, setPending] = useState(false);
   const [showThinking, setShowThinking] = useState(true);
+  const [enableDeepThinking, setEnableDeepThinking] = useState(true);
   const actualConversationIdRef = useRef<string | null>(null);
   const textareaIsInBottom =
     thinkingString || contentString || textList.length !== 0 ? true : false;
@@ -66,11 +69,22 @@ function ChatInterface({ conversationId }: Props) {
     const currentId =
       actualConversationIdRef.current ||
       (conversationId === "new" ? null : conversationId);
-    for await (const chunk of fetchData(message, currentId)) {
+
+    // 如果关闭深度思考，自动隐藏思考过程
+    if (!enableDeepThinking) {
+      setShowThinking(false);
+    }
+
+    for await (const chunk of fetchData(
+      message,
+      currentId,
+      enableDeepThinking
+    )) {
       if (chunk.type === "reasoning") {
-        setThinkingString((prev) => prev + chunk.content);
+        if (enableDeepThinking) {
+          setThinkingString((prev) => prev + chunk.content);
+        }
       } else if (chunk.type === "content") {
-        // setPending(false); // 一旦收到内容就关闭加载状态
         setContentString((prev) => prev + chunk.content);
       } else if (chunk.type === "conversationId" && chunk.conversationId) {
         if (
@@ -99,12 +113,20 @@ function ChatInterface({ conversationId }: Props) {
       e.preventDefault();
       setPending(true);
       await sendMessage();
+      setPending(false);
     }
+  };
+
+  const handleSendClick = async () => {
+    if (!inputString.trim() || pending) return;
+    setPending(true);
+    await sendMessage();
+    setPending(false);
   };
 
   return (
     <div className="relative flex h-screen w-full flex-col min-h-screen ">
-      <div className="flex-1 flex gap-4 flex-col items-center text-left">
+      <div className="flex-1 flex gap-4 mb-4 flex-col items-center text-left">
         {textList.map((textObj, idx) => {
           if (textObj.type === "user") {
             return (
@@ -158,13 +180,43 @@ function ChatInterface({ conversationId }: Props) {
           "flex items-center justify-center"
         }
       >
-        <Textarea
-          value={inputString}
-          onChange={(e) => setInputString(e.target.value)}
-          onKeyDown={handleTextareaKeyDown}
-          className="w-2/3 h-30 resize-none"
-          placeholder="输入你的问题……"
-        />
+        <div className="w-2/3 relative">
+          <Textarea
+            value={inputString}
+            onChange={(e) => setInputString(e.target.value)}
+            onKeyDown={handleTextareaKeyDown}
+            className="resize-none pr-24 pb-12 min-h-[120px] max-h-[120px] overflow-y-auto"
+            placeholder="输入你的问题……"
+            disabled={pending}
+          />
+          <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+            <button
+              onClick={() => setEnableDeepThinking(!enableDeepThinking)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors ${
+                enableDeepThinking
+                  ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              <Brain className="w-4 h-4" />
+              <span>深度思考</span>
+              {enableDeepThinking && (
+                <span className="text-xs bg-blue-200 px-1.5 py-0.5 rounded">
+                  开启
+                </span>
+              )}
+            </button>
+            <Button
+              onClick={handleSendClick}
+              disabled={!inputString.trim() || pending}
+              size="sm"
+              className="gap-2"
+            >
+              <Send className="w-4 h-4" />
+              发送
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -172,9 +172,13 @@ async function maybeSummarizeSession(session: MemorySession) {
 // 与模型进行一次流式对话：
 // - 返回可读流（SSE）用于边写边读到客户端
 // - 同时返回 finalContent Promise，供流结束后写入记忆
-async function main(messages: ChatCompletionMessageParam[]) {
+async function main(
+  messages: ChatCompletionMessageParam[],
+  enableDeepThinking: boolean
+) {
+  const model = enableDeepThinking ? "deepseek-reasoner" : "deepseek-chat";
   const completion = await openai.chat.completions.create({
-    model: "deepseek-reasoner",
+    model,
     messages,
     stream: true,
   });
@@ -248,6 +252,7 @@ type deepseekRequestBody = {
   input: string;
   reset?: boolean;
   conversationId?: string;
+  enableDeepThinking?: boolean;
 };
 
 /**
@@ -266,6 +271,7 @@ export async function POST(req: NextRequest) {
       const userId = req.cookies.get("user-id")?.value;
       return JSON.parse(userId ?? "null") as string | null;
     })();
+    const enableDeepThinking = body.enableDeepThinking ?? false;
     if (!input) {
       // 参数校验：必须提供 input
       return NextResponse.json(
@@ -311,7 +317,7 @@ export async function POST(req: NextRequest) {
     const messages = buildPromptMessages(session, input);
 
     // 4) 与 DeepSeek 进行流式对话
-    const { readable, finalContent } = await main(messages);
+    const { readable, finalContent } = await main(messages, enableDeepThinking);
 
     // 5) 返回 SSE 响应给客户端
     const response = new NextResponse(readable, {
