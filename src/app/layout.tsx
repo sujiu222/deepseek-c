@@ -8,6 +8,7 @@ import {
   SidebarInset,
 } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSider";
+import { Toaster } from "@/components/ui/toaster";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,6 +39,7 @@ export default function RootLayout({
           <AppSidebar />
           <SidebarInset className="overflow-y-auto">{children}</SidebarInset>
         </SidebarProvider>
+        <Toaster />
       </body>
     </html>
   );

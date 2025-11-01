@@ -3,6 +3,7 @@
 import { loginOrSignUp } from "@/lib/auth";
 import useStore from "@/store/store";
 import { useState } from "react";
+import { useToast } from "@/components/ui/use-toast";
 
 type Props = {
   onSuccess?: () => void;
@@ -14,17 +15,35 @@ function Login({ onSuccess, onCancel, open }: Props) {
   const [password, setPassword] = useState("");
   const [isLogin, setIsLogin] = useState(true);
   const setUser = useStore((state) => state.setUser);
+  const { toast } = useToast();
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
+
+    if (!username.trim() || !password.trim()) {
+      toast({
+        variant: "destructive",
+        title: "错误",
+        description: "请输入用户名和密码",
+      });
+      return;
+    }
+
     const user = await loginOrSignUp(username, password, !isLogin);
     if (user && "error" in user) {
-      alert(user.error);
-      onCancel?.();
+      toast({
+        variant: "destructive",
+        title: isLogin ? "登录失败" : "注册失败",
+        description: user.error,
+      });
       return;
     }
 
     setUser(user);
+    toast({
+      title: "成功",
+      description: isLogin ? "登录成功！" : "注册成功！",
+    });
     onSuccess?.();
   };
 

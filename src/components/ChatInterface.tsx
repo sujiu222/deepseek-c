@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
 import { ModelSelector } from "@/components/ModelSelector";
 import { getDefaultModel, getModelById, type ModelConfig } from "@/lib/models";
+import { useToast } from "@/components/ui/use-toast";
 
 type Props = { conversationId: string };
 
@@ -27,6 +28,7 @@ function ChatInterface({ conversationId }: Props) {
   const actualConversationIdRef = useRef<string | null>(null);
   const textareaIsInBottom =
     thinkingString || contentString || textList.length !== 0 ? true : false;
+  const { toast } = useToast();
 
   // 从 sessionStorage 加载保存的模型选择
   useEffect(() => {
@@ -71,13 +73,24 @@ function ChatInterface({ conversationId }: Props) {
             setTextList(history);
             actualConversationIdRef.current = conversationId;
           }
+        } else {
+          toast({
+            variant: "destructive",
+            title: "加载失败",
+            description: "无法加载历史对话",
+          });
         }
       } catch (err) {
         console.error("加载历史对话失败", err);
+        toast({
+          variant: "destructive",
+          title: "错误",
+          description: "加载历史对话失败，请刷新页面重试",
+        });
       }
     };
     loadHistory();
-  }, [conversationId]);
+  }, [conversationId, toast]);
 
   // 发送逻辑：从当前输入框内容发送,并按流式更新
   const sendMessage = async () => {
@@ -95,24 +108,48 @@ function ChatInterface({ conversationId }: Props) {
       actualConversationIdRef.current ||
       (conversationId === "new" ? null : conversationId);
 
-    for await (const chunk of fetchData(message, currentId, selectedModel.id)) {
-      if (chunk.type === "reasoning") {
-        setThinkingString((prev) => prev + chunk.content);
-      } else if (chunk.type === "content") {
-        setContentString((prev) => prev + chunk.content);
-      } else if (chunk.type === "conversationId" && chunk.conversationId) {
-        if (
-          !actualConversationIdRef.current &&
-          (!conversationId || conversationId === "new")
-        ) {
-          actualConversationIdRef.current = chunk.conversationId;
-          window.history.replaceState(
-            null,
-            "",
-            `/chat/${chunk.conversationId}`
-          );
+    try {
+      for await (const chunk of fetchData(
+        message,
+        currentId,
+        selectedModel.id
+      )) {
+        if (chunk.type === "reasoning") {
+          setThinkingString((prev) => prev + chunk.content);
+        } else if (chunk.type === "content") {
+          setContentString((prev) => prev + chunk.content);
+        } else if (chunk.type === "error") {
+          toast({
+            variant: "destructive",
+            title: "错误",
+            description: chunk.content,
+          });
+          setContentString("");
+          setThinkingString("");
+          return;
+        } else if (chunk.type === "conversationId" && chunk.conversationId) {
+          if (
+            !actualConversationIdRef.current &&
+            (!conversationId || conversationId === "new")
+          ) {
+            actualConversationIdRef.current = chunk.conversationId;
+            window.history.replaceState(
+              null,
+              "",
+              `/chat/${chunk.conversationId}`
+            );
+          }
         }
       }
+    } catch (error) {
+      console.error("发送消息失败:", error);
+      toast({
+        variant: "destructive",
+        title: "发送失败",
+        description: "消息发送失败，请重试",
+      });
+      setContentString("");
+      setThinkingString("");
     }
 
     // 发送完成后通知侧边栏刷新历史记录

@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Eye, EyeOff, Save, Key } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 
 type ApiKeyDialogProps = {
   open: boolean;
@@ -23,6 +24,7 @@ export function ApiKeyDialog({ open, onOpenChange }: ApiKeyDialogProps) {
   const [showApiKey, setShowApiKey] = useState(false);
   const [loading, setLoading] = useState(false);
   const [hasExistingKey, setHasExistingKey] = useState(false);
+  const { toast } = useToast();
 
   // 加载现有的 API Key
   useEffect(() => {
@@ -51,7 +53,11 @@ export function ApiKeyDialog({ open, onOpenChange }: ApiKeyDialogProps) {
 
   const handleSave = async () => {
     if (!apiKey.trim()) {
-      alert("请输入 API Key");
+      toast({
+        variant: "destructive",
+        title: "错误",
+        description: "请输入 API Key",
+      });
       return;
     }
 
@@ -67,16 +73,27 @@ export function ApiKeyDialog({ open, onOpenChange }: ApiKeyDialogProps) {
       });
 
       if (res.ok) {
-        alert("API Key 保存成功！");
+        toast({
+          title: "成功",
+          description: "API Key 保存成功！",
+        });
         setHasExistingKey(true);
         onOpenChange(false);
       } else {
         const data = await res.json();
-        alert(data.error || "保存失败");
+        toast({
+          variant: "destructive",
+          title: "保存失败",
+          description: data.error || "保存失败，请重试",
+        });
       }
     } catch (error) {
       console.error("保存 API Key 失败:", error);
-      alert("保存失败，请重试");
+      toast({
+        variant: "destructive",
+        title: "错误",
+        description: "保存失败，请重试",
+      });
     } finally {
       setLoading(false);
     }
@@ -95,16 +112,27 @@ export function ApiKeyDialog({ open, onOpenChange }: ApiKeyDialogProps) {
       });
 
       if (res.ok) {
-        alert("API Key 已删除");
+        toast({
+          title: "成功",
+          description: "API Key 已删除",
+        });
         setApiKey("");
         setHasExistingKey(false);
         onOpenChange(false);
       } else {
-        alert("删除失败");
+        toast({
+          variant: "destructive",
+          title: "错误",
+          description: "删除失败，请重试",
+        });
       }
     } catch (error) {
       console.error("删除 API Key 失败:", error);
-      alert("删除失败，请重试");
+      toast({
+        variant: "destructive",
+        title: "错误",
+        description: "删除失败，请重试",
+      });
     } finally {
       setLoading(false);
     }

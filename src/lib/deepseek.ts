@@ -15,8 +15,18 @@ export async function* fetchData(
       body: JSON.stringify({ input, conversationId, modelId }),
     });
 
+    if (!response.ok) {
+      const errorData = await response.json();
+      yield {
+        type: "error",
+        content: errorData.error || "请求失败，请稍后重试",
+      };
+      return;
+    }
+
     if (!response.body) {
-      throw new Error("No response body");
+      yield { type: "error", content: "服务器响应异常" };
+      return;
     }
 
     const reader = response.body.getReader();
@@ -45,11 +55,16 @@ export async function* fetchData(
           yield { type: parsed.type, content: parsed.content };
         } else if (parsed.type === "content") {
           yield { type: parsed.type, content: parsed.content };
+        } else if (parsed.type === "error") {
+          yield { type: "error", content: parsed.content };
         }
       }
     }
   } catch (err) {
     console.error("Error fetching data", err);
-    // setContentString("Error fetching data");
+    yield {
+      type: "error",
+      content: err instanceof Error ? err.message : "网络错误，请检查网络连接",
+    };
   }
 }
