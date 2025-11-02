@@ -6,7 +6,7 @@ export type StoreState = {
   setUser: (user: User | null) => void;
 };
 
-const useStore = create<StoreState>((set, get) => ({
+const useStore = create<StoreState>((set) => ({
   user: null as User | null,
   setUser: (user: User | null) => set({ user }),
 }));

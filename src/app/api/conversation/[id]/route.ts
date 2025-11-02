@@ -5,8 +5,10 @@ const prisma = new PrismaClient();
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+  
   const userId = (() => {
     const userId = req.cookies.get("user-id")?.value;
     return JSON.parse(userId ?? "null") as string | null;
@@ -24,7 +26,7 @@ export async function GET(
     );
   }
 
-  const conversationId = params.id;
+  const conversationId = id;
 
   const conversation = await prisma.conversation.findFirst({
     where: {

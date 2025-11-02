@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { USER_COOKIE } from "../route";
+import { USER_COOKIE } from "@/lib/constants";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();

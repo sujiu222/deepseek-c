@@ -10,7 +10,7 @@ type Props = {
   onCancel?: () => void;
   open: boolean;
 };
-function Login({ onSuccess, onCancel, open }: Props) {
+function Login({ onSuccess, open }: Props) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLogin, setIsLogin] = useState(true);

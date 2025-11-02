@@ -4,10 +4,16 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CodeBlock } from "./CodeBlock";
 import "github-markdown-css/github-markdown.css";
+import { ClassAttributes, HTMLAttributes } from "react";
 
 interface MarkdownMessageProps {
   content: string;
 }
+
+type CodeComponentProps = ClassAttributes<HTMLElement> &
+  HTMLAttributes<HTMLElement> & {
+    inline?: boolean;
+  };
 
 export function MarkdownMessage({ content }: MarkdownMessageProps) {
   return (
@@ -15,7 +21,7 @@ export function MarkdownMessage({ content }: MarkdownMessageProps) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          code({ node, className, children, ...props }: any) {
+          code({ className, children, ...props }: CodeComponentProps) {
             const match = /language-(\w+)/.exec(className || "");
             const inline = !match;
             const codeString = String(children).replace(/\n$/, "");

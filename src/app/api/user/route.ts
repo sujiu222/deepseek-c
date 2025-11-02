@@ -1,19 +1,18 @@
 import { PrismaClient } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
+import { USER_COOKIE } from "@/lib/constants";
 
 const prisma = new PrismaClient({
   log: ["query", "info", "warn", "error"], // 开发阶段可看 SQL
 });
-
-export const USER_COOKIE = "user-id";
 
 async function signUp(username: string, password: string) {
   try {
     return await prisma.user.create({
       data: { username, password },
     });
-  } catch (e: any) {
-    if (e?.code === "P2002") {
+  } catch (e: unknown) {
+    if (e && typeof e === 'object' && 'code' in e && e.code === "P2002") {
       return { error: "User already exists" };
     }
   }
@@ -79,7 +78,7 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({ user });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ user: null });
   }
 }

@@ -66,8 +66,8 @@ function ChatInterface({ conversationId }: Props) {
         if (res.ok) {
           const data = await res.json();
           if (data.messages) {
-            const history = data.messages.map((msg: any) => ({
-              type: msg.role === "user" ? "user" : "ai",
+            const history = data.messages.map((msg: { role: string; content: string }) => ({
+              type: msg.role === "user" ? ("user" as const) : ("ai" as const),
               content: msg.content,
             }));
             setTextList(history);

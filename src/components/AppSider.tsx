@@ -3,7 +3,6 @@ import { ChevronUp, MessageCirclePlus } from "lucide-react";
 import Login from "@/components/Login";
 import { ApiKeyDialog } from "@/components/ApiKeyDialog";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 import {
   Sidebar,
@@ -101,6 +100,7 @@ export function AppSidebar() {
     } else {
       setMessageHistory([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // 定期刷新历史记录（每 10 秒）
@@ -112,6 +112,7 @@ export function AppSidebar() {
     }, 10000); // 10 秒刷新一次
 
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // 监听自定义事件，发送消息后主动刷新
@@ -123,6 +124,7 @@ export function AppSidebar() {
     window.addEventListener("conversationUpdated", handleRefresh);
     return () =>
       window.removeEventListener("conversationUpdated", handleRefresh);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   return (
