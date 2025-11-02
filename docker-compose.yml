@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  # 数据库迁移服务（一次性运行）
+  migrate:
+    build: .
+    container_name: deepseek-migrate
+    env_file:
+      - .env.production
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: npx prisma migrate deploy
+    profiles:
+      - migration
+
+  # 主应用服务
+  deepseek-c:
+    build: .
+    container_name: deepseek-c
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - .env.production
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
