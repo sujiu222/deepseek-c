@@ -12,7 +12,7 @@ async function signUp(username: string, password: string) {
       data: { username, password },
     });
   } catch (e: unknown) {
-    if (e && typeof e === 'object' && 'code' in e && e.code === "P2002") {
+    if (e && typeof e === "object" && "code" in e && e.code === "P2002") {
       return { error: "User already exists" };
     }
   }

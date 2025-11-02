@@ -7,10 +7,6 @@ const nextConfig: NextConfig = {
   // 参考：https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats
   outputFileTracingRoot: path.join(__dirname),
   output: "standalone",
-  // Windows 下禁用符号链接以避免权限问题
-  outputFileTracingIncludes: {
-    "/**": ["./node_modules/**"],
-  },
 };
 
 export default nextConfig;

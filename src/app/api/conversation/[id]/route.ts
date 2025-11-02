@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  
+
   const userId = (() => {
     const userId = req.cookies.get("user-id")?.value;
     return JSON.parse(userId ?? "null") as string | null;
