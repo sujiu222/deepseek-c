@@ -144,11 +144,11 @@ function ChatInterface({ conversationId }: Props) {
         }
       }
     } catch (error) {
-      console.error("发送消息失败:", error);
+      const errorData = JSON.parse((error as any).message);
       toast({
         variant: "destructive",
         title: "发送失败",
-        description: "消息发送失败，请重试",
+        description: errorData.error.message,
       });
       setContentString("");
       setThinkingString("");

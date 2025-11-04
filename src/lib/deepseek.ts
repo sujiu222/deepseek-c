@@ -13,15 +13,14 @@ export async function* fetchData(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ input, conversationId, modelId }),
+    }).catch((err) => {
+      throw err;
     });
 
-    if (!response.ok) {
+    if (!response.status.toString().startsWith("2")) {
       const errorData = await response.json();
-      yield {
-        type: "error",
-        content: errorData.error || "请求失败，请稍后重试",
-      };
-      return;
+      console.log("DeepSeek API error response:", errorData);
+      throw Error(JSON.stringify(errorData));
     }
 
     if (!response.body) {
@@ -61,10 +60,6 @@ export async function* fetchData(
       }
     }
   } catch (err) {
-    console.error("Error fetching data", err);
-    yield {
-      type: "error",
-      content: err instanceof Error ? err.message : "网络错误，请检查网络连接",
-    };
+    throw err;
   }
 }

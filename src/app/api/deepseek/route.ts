@@ -181,11 +181,16 @@ async function main(
   userApiKey: string
 ) {
   const openai = createOpenAIClient(userApiKey);
-  const completion = await openai.chat.completions.create({
-    model: modelId,
-    messages,
-    stream: true,
-  });
+  let completion;
+  try {
+    completion = await openai.chat.completions.create({
+      model: modelId,
+      messages,
+      stream: true,
+    });
+  } catch (error) {
+    throw error;
+  }
   //   console.log("DeepSeek response:", completion);
 
   const { readable, writable } = new TransformStream();
@@ -314,13 +319,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 记录用户选择的模型（仅用于日志）
-    console.log(
-      `User ${userId} selected model: ${modelId}, using ${
-        userApiKey ? "user" : "default"
-      } API key`
-    );
-
     let conversationId: string = body.conversationId ?? "";
     let isNewConversation = false;
 
@@ -345,12 +343,20 @@ export async function POST(req: NextRequest) {
     // 3) 构建本轮 Prompt 消息
     const messages = buildPromptMessages(session, input);
 
+    let readable: ReadableStream | undefined;
+    let finalContent:
+      | Promise<{ content: string; reasoning: string }>
+      | undefined;
     // 4) 与 AI 模型进行流式对话（使用用户选择的模型和API Key）
-    const { readable, finalContent } = await main(
-      messages,
-      modelId,
-      userApiKey
-    );
+    try {
+      ({ readable, finalContent } = await main(messages, modelId, userApiKey));
+    } catch (err) {
+      console.error("Failed to start streaming main()", err);
+      return NextResponse.json(err, {
+        status: 502,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
     // 5) 返回 SSE 响应给客户端
     const response = new NextResponse(readable, {
