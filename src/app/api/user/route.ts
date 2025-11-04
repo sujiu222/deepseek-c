@@ -1,10 +1,6 @@
-import { PrismaClient } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { USER_COOKIE } from "@/lib/constants";
-
-const prisma = new PrismaClient({
-  log: ["query", "info", "warn", "error"], // 开发阶段可看 SQL
-});
+import { prisma } from "@/lib/prisma";
 
 async function signUp(username: string, password: string) {
   try {
@@ -69,7 +65,18 @@ export async function GET(request: NextRequest) {
   }
 
   const userIdRaw = cookies.get(USER_COOKIE)?.value as string;
-  const userId = JSON.parse(userIdRaw);
+
+  // 安全的 JSON 解析
+  let userId: string | null = null;
+  try {
+    userId = userIdRaw ? JSON.parse(userIdRaw) : null;
+  } catch {
+    return NextResponse.json({ user: null });
+  }
+
+  if (!userId) {
+    return NextResponse.json({ user: null });
+  }
 
   try {
     const user = await prisma.user.findUnique({

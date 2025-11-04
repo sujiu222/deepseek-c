@@ -52,8 +52,8 @@ NODE_ENV=production
 # 3. 构建并启动
 docker-compose up -d --build
 
-# 4. 运行数据库迁移
-docker exec -it deepseek-c npx prisma migrate deploy
+# 4. 进入容器并运行数据库迁移和 Prisma 生成
+docker exec -it deepseek-c sh -c "npx prisma generate && npx prisma migrate deploy"
 
 # 5. 查看日志
 docker logs -f deepseek-c
@@ -127,6 +127,27 @@ pnpm build
 - 检查 `DATABASE_URL` 是否正确
 - 确认使用 `host.docker.internal` 而非 `localhost`
 - 检查 PostgreSQL 是否启动
+
+### Prisma Client 模块未找到错误
+
+如果遇到 `Cannot find module '.prisma/client/default'` 错误:
+
+```bash
+# 进入容器
+docker exec -it deepseek-c sh
+
+# 生成 Prisma Client
+npx prisma generate
+
+# 重启容器
+exit
+docker restart deepseek-c
+```
+
+**原因**: Prisma Client 需要在部署后生成。确保:
+
+1. `package.json` 的 `build` 脚本包含 `prisma generate`
+2. 或在容器启动后手动运行 `prisma generate`
 
 ### 构建失败
 

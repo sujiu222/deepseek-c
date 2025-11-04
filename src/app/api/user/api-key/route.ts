@@ -2,9 +2,7 @@
  * API Key 管理端点
  */
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 // 获取用户是否已设置 API Key
 export async function GET(req: NextRequest) {

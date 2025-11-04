@@ -8,15 +8,15 @@
  * - 当本轮流式结束后，再把本轮对话写入记忆，并按需触发总结与裁剪
  *
  * 说明：
- * - 记忆默认仅存储于当前 Node 进程内（内存级），重启/多实例不会共享。若需要持久化/横向扩展，请改为数据库或 KV 存储。
+ * - 记忆默认仅存储于当前 Node 进程内（内存级），重启/多实例不会共享。若需要持久化/横向扩展,请改为数据库或 KV 存储。
  */
-import { PrismaClient } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import type {
   ChatCompletionChunk,
   ChatCompletionMessageParam,
 } from "openai/resources/chat/completions";
+import { prisma } from "@/lib/prisma";
 
 // 定义一个泛型：为任何类型 T 附加 reasoning_content 属性（DeepSeek Reasoner 额外字段）
 type WithReasoning<T> = T & { reasoning_content?: string | null };
@@ -72,8 +72,6 @@ const baseURL = process.env.DEEPSEEK_RPC_URL ?? "https://api.deepseek.com";
 //     "Missing DEEPSEEK_API_KEY env var; Users must provide their own API keys."
 //   );
 // }
-
-const prisma = new PrismaClient();
 
 // 创建 OpenAI 客户端实例（支持自定义 API Key）
 function createOpenAIClient(apiKey: string) {
@@ -323,7 +321,7 @@ export async function POST(req: NextRequest) {
       } API key`
     );
 
-    let conversationId = body.conversationId;
+    let conversationId: string = body.conversationId ?? "";
     let isNewConversation = false;
 
     if (!conversationId) {
