@@ -144,7 +144,26 @@ function ChatInterface({ conversationId }: Props) {
         }
       }
     } catch (error) {
-      const errorData = JSON.parse((error as any).message);
+      type ChatAnywhereInnerError = {
+        message: string;
+        type: string;
+        param: string | null;
+        code: string;
+      };
+
+      type ChatAnywhereErrorDetail = {
+        status: number;
+        headers: Record<string, unknown>;
+        requestID: string | null;
+        error: ChatAnywhereInnerError; // 内层 error，包含 message 等
+        code: string;
+        param: string | null;
+        type: string;
+      };
+
+      const errorData: ChatAnywhereErrorDetail = JSON.parse(
+        (error as { message: string }).message
+      );
       toast({
         variant: "destructive",
         title: "发送失败",
