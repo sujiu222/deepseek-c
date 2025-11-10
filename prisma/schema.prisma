@@ -51,7 +51,7 @@ model Conversation {
   // sessionId 暂不考虑游客模式       String?
   // title           String?
   // status          String    @default("ACTIVE") // ACTIVE | ARCHIVED | DELETED
-  // summary         String?   @db.Text
+  summary         String?   @db.Text
   messageCount    Int       @default(0)
   // firstMessageAt  DateTime?
   // lastMessageAt   DateTime?

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { USER_COOKIE } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
+import { signToken } from "@/lib/auth";
 
 async function signUp(username: string, password: string) {
   try {
@@ -33,15 +34,25 @@ export async function POST(request: NextRequest) {
   } else {
     user = await login(username, password);
   }
+
   if (user && "error" in user) {
     return new NextResponse(JSON.stringify(user), {
       status: 400,
       headers: { "content-type": "application/json" },
     });
   }
+  const token = await signToken(user?.id as string);
+
   const res = new NextResponse(JSON.stringify(user), {
     status: 200,
     headers: { "content-type": "application/json" },
+  });
+
+  res.cookies.set("auth-token", JSON.stringify(token), {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
   });
 
   const id = user?.id;

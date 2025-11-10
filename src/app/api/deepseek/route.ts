@@ -11,6 +11,7 @@
  * - 记忆默认仅存储于当前 Node 进程内（内存级），重启/多实例不会共享。若需要持久化/横向扩展,请改为数据库或 KV 存储。
  */
 import { NextRequest, NextResponse } from "next/server";
+import { verifyToken } from "@/lib/auth";
 import OpenAI from "openai";
 import type {
   ChatCompletionChunk,
@@ -132,6 +133,7 @@ function trimSession(session: MemorySession) {
 // - 保留最近若干条原始消息，让模型能"贴地"对话
 async function maybeSummarizeSession(
   session: MemorySession,
+  conversationId: string,
   userApiKey: string
 ) {
   if (session.messages.length <= SUMMARY_TRIGGER_MESSAGE_COUNT) {
@@ -142,6 +144,10 @@ async function maybeSummarizeSession(
     .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
     .join("\n");
 
+  // ✅ 1. 备份原始消息
+  const originalMessages = [...session.messages];
+  const originalSummary = session.summary;
+
   try {
     const openai = createOpenAIClient(userApiKey);
     const summaryCompletion = await openai.chat.completions.create({
@@ -151,24 +157,62 @@ async function maybeSummarizeSession(
         {
           role: "system",
           content:
-            "You are summarizing a conversation so a future assistant can recall user preferences, facts, and pending questions.",
+            "You are summarizing a conversation so a future assistant can recall user preferences, facts, and pending questions. Be comprehensive and preserve key details.",
         },
         {
           role: "user",
           content: `Please summarize the key details and open threads from the conversation below so it can be recalled later. Keep it brief but comprehensive.\n\n${conversationForSummary}`,
         },
       ],
-      max_tokens: 256,
+      max_tokens: 512, // ✅ 增加 token 限制，避免摘要被截断
+      temperature: 0.3, // ✅ 降低随机性
     });
 
-    // 记录新摘要，并在内存中仅保留最近 N 条消息
     const summary = summaryCompletion.choices[0]?.message?.content?.trim();
-    if (summary) {
-      session.summary = summary;
-      session.messages = session.messages.slice(-RECENT_MESSAGES_AFTER_SUMMARY);
+
+    // ✅ 2. 验证摘要质量
+    if (!summary || summary.length < 50) {
+      throw new Error("Summary too short or empty");
     }
+
+    // ✅ 3. 先写数据库（带重试）
+    const MAX_RETRIES = 3;
+    let retries = 0;
+    while (retries < MAX_RETRIES) {
+      try {
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { summary },
+        });
+        break;
+      } catch (dbError) {
+        retries++;
+        if (retries >= MAX_RETRIES) {
+          throw new Error(
+            `Failed to save summary after ${MAX_RETRIES} retries: ${dbError}`
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100 * retries));
+      }
+    }
+
+    // ✅ 4. 数据库成功后才裁剪内存
+    session.summary = summary;
+    session.messages = session.messages.slice(-RECENT_MESSAGES_AFTER_SUMMARY);
   } catch (error) {
-    console.error("Failed to summarize conversation", error);
+    console.error("Failed to summarize conversation, rolling back", error);
+
+    // ✅ 5. 回滚到原始状态
+    session.messages = originalMessages;
+    session.summary = originalSummary;
+
+    // ✅ 6. 发送告警
+    // 这里可以集成告警系统（如 Sentry、钉钉机器人）
+    console.error(
+      "CRITICAL: Summary generation failed for conversation",
+      conversationId,
+      error
+    );
   }
 }
 
@@ -276,46 +320,40 @@ export async function POST(req: NextRequest) {
     const input =
       typeof body?.input === "string" ? body.input.trim() : undefined;
 
-    const userId = (() => {
-      const userId = req.cookies.get("user-id")?.value;
-      return JSON.parse(userId ?? "null") as string | null;
-    })();
-    const modelId = body.modelId ?? "deepseek-r1"; // 默认使用 deepseek-r1
-
-    if (!input) {
-      // 参数校验：必须提供 input
+    // ✅ 从 Cookie 读取并验证 JWT
+    if (!req.cookies.get("auth-token")?.value) {
       return NextResponse.json(
-        { error: "Missing input" },
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        }
+        { error: "Unauthorized - Missing token" },
+        { status: 401 }
       );
     }
+
+    const token = JSON.parse(req.cookies.get("auth-token")?.value as string);
+    const userId = await verifyToken(token);
     if (!userId) {
       return NextResponse.json(
-        { error: "Unauthorized" },
-        {
-          status: 401,
-          headers: { "Content-Type": "application/json" },
-        }
+        { error: "Unauthorized - Invali【 token" },
+        { status: 401 }
       );
     }
 
-    // 获取用户的 API Key（如果已设置）
+    const modelId = body.modelId ?? "deepseek-r1";
+
+    if (!input) {
+      return NextResponse.json({ error: "Missing input" }, { status: 400 });
+    }
+
+    // 获取用户的 API Key
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { apiKey: true },
     });
-    const userApiKey = user?.apiKey;
 
+    const userApiKey = user?.apiKey;
     if (!userApiKey) {
       return NextResponse.json(
         { error: "User API Key not set" },
-        {
-          status: 403,
-          headers: { "Content-Type": "application/json" },
-        }
+        { status: 403 }
       );
     }
 
@@ -324,9 +362,7 @@ export async function POST(req: NextRequest) {
 
     if (!conversationId) {
       ({ id: conversationId } = await prisma.conversation.create({
-        data: {
-          userId,
-        },
+        data: { userId },
       }));
       isNewConversation = true;
     }
@@ -352,10 +388,7 @@ export async function POST(req: NextRequest) {
       ({ readable, finalContent } = await main(messages, modelId, userApiKey));
     } catch (err) {
       console.error("Failed to start streaming main()", err);
-      return NextResponse.json(err, {
-        status: 502,
-        headers: { "Content-Type": "application/json" },
-      });
+      return NextResponse.json(err, { status: 502 });
     }
 
     // 5) 返回 SSE 响应给客户端
@@ -372,68 +405,59 @@ export async function POST(req: NextRequest) {
     // 6) 流结束后异步写入会话记忆，并按需总结、裁剪
     finalContent
       .then(async ({ content, reasoning }) => {
-        session.messages.push({ role: "user", content: input });
-        const assistantMessage: MemoryMessage = {
-          role: "assistant",
-          content,
-        };
-        if (reasoning.trim()) {
-          assistantMessage.reasoning = reasoning;
+        // 先写数据库，成功后再更新内存
+        try {
+          await prisma.$transaction(async (tx) => {
+            // 使用乐观锁或在事务内重新读取最新 messageCount
+            const conv = await tx.conversation.findUnique({
+              where: { id: conversationId },
+              select: { messageCount: true },
+            });
+
+            const userSeq = conv!.messageCount;
+            const assistantSeq = conv!.messageCount + 1;
+
+            await tx.conversation.update({
+              where: { id: conversationId },
+              data: {
+                updatedAt: new Date(),
+                messageCount: userSeq + 2,
+              },
+            });
+
+            await tx.message.createMany({
+              data: [
+                { conversationId, role: "user", content: input, seq: userSeq },
+                {
+                  conversationId,
+                  role: "assistant",
+                  content,
+                  reasoning: reasoning.trim() || undefined,
+                  seq: assistantSeq,
+                },
+              ],
+            });
+          });
+
+          // 数据库成功后才更新内存
+          session.messages.push({ role: "user", content: input });
+          session.messages.push({ role: "assistant", content, reasoning });
+          await maybeSummarizeSession(session, conversationId, userApiKey);
+          trimSession(session);
+        } catch (error) {
+          console.error("Failed to persist message", error);
         }
-        session.messages.push(assistantMessage);
-
-        await maybeSummarizeSession(session, userApiKey);
-        trimSession(session);
-
-        // 同步更新数据库中的会话记录,添加user和assistant两条消息
-
-        await prisma.$transaction(async (tx) => {
-          const updated = await tx.conversation.update({
-            where: { id: conversationId },
-            data: {
-              updatedAt: new Date(),
-              messageCount: { increment: 2 },
-            },
-          });
-
-          // seq 从 0 开始计数，messageCount 是消息总数
-          // 更新后 messageCount = 2，则 userSeq = 0, assistantSeq = 1
-          const userSeq = updated.messageCount - 2;
-          const assistantSeq = updated.messageCount - 1;
-
-          await tx.message.create({
-            data: {
-              conversationId,
-              role: "user",
-              content: input,
-              seq: userSeq,
-            },
-          });
-
-          await tx.message.create({
-            data: {
-              conversationId,
-              role: "assistant",
-              content,
-              reasoning: reasoning.trim() ? reasoning : undefined,
-              seq: assistantSeq,
-            },
-          });
-        });
       })
       .catch((error) => {
         console.error("Failed to finalize DeepSeek response", error);
       });
-    // 7.返回response
+
     return response;
   } catch (error) {
     console.error("DeepSeek request failed", error);
     return NextResponse.json(
       { message: "Failed to contact DeepSeek", error },
-      {
-        status: 502,
-        headers: { "Content-Type": "application/json" },
-      }
+      { status: 502 }
     );
   }
 }
